@@ -69,9 +69,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # The Stringparser
 set(STRINGPARSER_SRCS
   stringparser.c
+  funcs.c
   main.cpp
-  ../amx/amxdbg.c
-)
+  ../amx/amxdbg.c)
 add_executable(main ${STRINGPARSER_SRCS})
 if(UNIX)
   target_link_libraries(main dl)

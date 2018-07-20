@@ -5,98 +5,138 @@
 #include <string.h>
 
 #include "sc.h"
+#include "../amx/amxdbg.h"
 
-static FILE *fpamx;
-static AMX_HEADER amxhdr;
+#include "funcs.h"
 
-typedef cell (*OPCODE_PROC)(FILE *ftxt, const cell *params, cell opcode, cell cip);
+extern void expand(unsigned char *code, long codesize, long memsize);
+extern char addchars(cell value, int pos);
+extern int getPositionStrip(int i);
 
-static void expand(unsigned char *code, long codesize, long memsize)
+extern cell global_strip[MAX_STRIP];
+extern int counter;
+
+extern FILE *fpamx, *fpfunc;
+extern AMX_HEADER amxhdr;
+extern int dbgloaded;
+extern AMX_DBG amxdbg;
+
+extern OPCODE opcodelist[];
+
+void func_CreateDynamicObject(char* name)
 {
-    ucell c;
-    struct
+    #define params_CreateDynamicObject 14
+    float_ieee754 u;
+    fprintf(fpfunc, "%s(", name);
+    for(int i = getPositionStrip(counter), j = 0; j < params_CreateDynamicObject; i = getPositionStrip(i), j++)
     {
-        long memloc;
-        ucell c;
-    } spare[AMX_COMPACTMARGIN];
-    int sh = 0, st = 0, sc = 0;
-    int shift;
-    assert(memsize % sizeof(cell) == 0);
-    while (codesize > 0)
-    {
-        c = 0;
-        shift = 0;
-        do
+        if((j >= 1 && j <= 6) || j == 10)
         {
-            codesize--;
-            assert(shift < 8 * sizeof(cell));
-            assert(shift > 0 || (code[(size_t)codesize] & 0x80) == 0);
-            c |= (ucell)(code[(size_t)codesize] & 0x7f) << shift;
-            shift += 7;
-        }
-        while (codesize > 0 && (code[(size_t)codesize - 1] & 0x80) != 0);
-
-        if ((code[(size_t)codesize] & 0x40) != 0)
-        {
-            while (shift < (int)(8 * sizeof(cell)))
-            {
-                c |= (ucell)0xff << shift;
-                shift += 8;
-            }
-        }
-
-        while (sc && (spare[sh].memloc > codesize))
-        {
-            *(ucell *)(code + (int)spare[sh].memloc) = spare[sh].c;
-            sh = (sh + 1) % AMX_COMPACTMARGIN;
-            sc--;
-        }
-        memsize -= sizeof(cell);
-        assert(memsize >= 0);
-        if ((memsize > codesize) || ((memsize == codesize) && (memsize == 0)))
-        {
-            *(ucell *)(code + (size_t)memsize) = c;
+            u.i = global_strip[i];
+            fprintf(fpfunc,"%f",u.f);
         }
         else
         {
-            assert(sc < AMX_COMPACTMARGIN);
-            spare[st].memloc = memsize;
-            spare[st].c = c;
-            st = (st + 1) % AMX_COMPACTMARGIN;
-            sc++;
+            fprintf(fpfunc,"%d", global_strip[i]);
         }
+
+        if(j != params_CreateDynamicObject - 1)
+            fprintf(fpfunc, ", ");
     }
-    assert(memsize == 0);
+    fprintf(fpfunc, ");\n");
 }
 
-static char addchars(cell value, int pos)
+void func_CreateObject(char* name)
 {
-    for (int i = 0, v; i < sizeof(cell); i++)
+    #define params_CreateObject 8
+    float_ieee754 u;
+    fprintf(fpfunc, "%s(", name);
+    for(int i = getPositionStrip(counter), j = 0; j < params_CreateObject; i = getPositionStrip(i), j++)
     {
-        v = (value >> 8 * (sizeof(cell) - 1)) & 0xff;
-        value <<= 8;
-        if(v >= 32) return (char)v;
+        if(j >= 1 && j <= 7)
+        {
+            u.i = global_strip[i];
+            fprintf(fpfunc,"%f",u.f);
+        }
+        else
+        {
+            fprintf(fpfunc,"%d", global_strip[i]);
+        }
+
+        if(j != params_CreateObject - 1)
+            fprintf(fpfunc, ", ");
     }
-    return ' ';
+    fprintf(fpfunc, ");\n");
 }
 
-int execute(int argc, char *argv[])
+void func_Create3DTextLabel(char* name)
 {
-    char data[FILENAME_MAX];
-    FILE *fpdata;
-    int codesize, count;
-    cell *code, *cip, tmp;
-    char sym;
+    #define params_Create3DTextLabel 8
+    float_ieee754 u;
+    fprintf(fpfunc, "%s(", name);
+    for(int i = getPositionStrip(counter), j = 0; j < params_Create3DTextLabel; i = getPositionStrip(i), j++)
+    {
+        if(j == 0 || j == 1) // Параметр - строка
+        {
+            fprintf(fpfunc,"%08"PRIxC"", global_strip[i]);
+        }
+        else if(j >= 2 && j <= 5) // Параметр - float
+        {
+            u.i = global_strip[i];
+            fprintf(fpfunc,"%f",u.f);
+        }
+        else // Параметр - число
+        {
+            fprintf(fpfunc,"%d", global_strip[i]);
+        }
 
-    strcpy(data, "data.txt");
+        if(j != params_Create3DTextLabel - 1)
+            fprintf(fpfunc, ", ");
+    }
+    fprintf(fpfunc, ");\n");
+}
+
+int execute(int argc,char *argv[])
+{
+    if (argc != 2)
+    {
+        printf("Usage: stringparser <*.amx>\n");
+        return 1;
+    }
+
+    char name[FILENAME_MAX], data[FILENAME_MAX], objects[FILENAME_MAX];
+    FILE *fplist, *fpdata;
+
+    strcpy(name, "source_");
+    strcat(name, argv[1]);
+    strcat(name, ".txt");
+
+    strcpy(data, "data_");
+    strcat(data, argv[1]);
+    strcat(data, ".txt");
+
+    strcpy(objects, "objects_");
+    strcat(objects, argv[1]);
+    strcat(objects, ".txt");
+
     if ((fpamx = fopen(argv[1], "rb")) == NULL)
     {
         printf("Unable to open input file \"%s\"\n", argv[1]);
         return 1;
     }
+    if ((fplist = fopen(name, "wt")) == NULL)
+    {
+        printf("Unable to create output file \"%s\"\n", name);
+        return 1;
+    }
     if ((fpdata = fopen(data, "wt")) == NULL)
     {
         printf("Unable to create output file \"%s\"\n", data);
+        return 1;
+    }
+    if ((fpfunc = fopen(objects, "wt")) == NULL)
+    {
+        printf("Unable to create output file \"%s\"\n", objects);
         return 1;
     }
 
@@ -111,8 +151,10 @@ int execute(int argc, char *argv[])
         printf("Not a valid AMX file\n");
         return 1;
     }
-    codesize = amxhdr.hea - amxhdr.cod;
+    int codesize = amxhdr.hea - amxhdr.cod;
 
+
+    cell *code;
     if ((code = malloc(codesize)) == NULL)
     {
         printf("Insufficient memory: need %d bytes\n", codesize);
@@ -120,35 +162,93 @@ int execute(int argc, char *argv[])
     }
 
     fseek(fpamx, amxhdr.cod, SEEK_SET);
-    if ((int32_t)fread(code, 1, codesize, fpamx) < amxhdr.size - amxhdr.cod)
+    if ((int32_t)fread(code, 1, codesize, fpamx) < amxhdr.size-amxhdr.cod)
     {
         printf("Unable to read code: %s\n", feof(fpamx) ? "End of file reached" : strerror(errno));
         return 1;
     }
     if ((amxhdr.flags & AMX_FLAG_COMPACT) != 0)
-        expand((unsigned char *)code, amxhdr.size - amxhdr.cod, amxhdr.hea - amxhdr.cod);
+        expand((unsigned char *)code,amxhdr.size-amxhdr.cod,amxhdr.hea-amxhdr.cod);
 
+    char line[sLINEMAX], sym;
+    FILE *fpsrc;
+    int count, i, j;
+    cell *cip, tmp;
+    OPCODE_PROC func;
+    const char *filename;
+    long nline, nprevline;
+
+    //Print code
+    cip = code;
+    codesize = amxhdr.dat-amxhdr.cod;
+    nprevline = -1;
+    while (((unsigned char*)cip - (unsigned char*)code) < codesize)
+    {
+        if (dbgloaded)
+        {
+            dbg_LookupFile(&amxdbg, (cell)(cip-code)*sizeof(cell), &filename);
+            dbg_LookupLine(&amxdbg, (cell)(cip-code)*sizeof(cell), &nline);
+            if (filename != NULL && nline != nprevline)
+            {
+                fpsrc = fopen(filename, "r");
+                if (fpsrc != NULL)
+                {
+                    for (i = 0; i <= nline; i++)
+                    {
+                        if (fgets(line, sizeof(line), fpsrc) == NULL)
+                            break;
+                        for (j=0; line[j] <= ' ' && line[j] != '\0'; j++)
+                            continue;
+                        if (line[j] != '\0' && i > nprevline)
+                            fputs(line, fplist);
+                    }
+                    fclose(fpsrc);
+                }
+                nprevline = nline;
+            }
+        }
+        func = opcodelist[(int)(*cip&0x0000ffff)].func;
+        int flag = 0;
+
+        if(opcodelist[(int)(*cip&0x0000ffff)].name == "sysreq.c")
+        {
+            flag = 1;
+        }
+        /*if(flag == 0) cip += func(fplist, cip+1, *cip, (cell)(cip-code)*sizeof(cell));
+        else cip += func(fpfunc, cip+1, *cip, (cell)(cip-code)*sizeof(cell));*/
+        cip += func(fplist, cip+1, *cip, (cell)(cip-code)*sizeof(cell));
+        flag = 0;
+    }
+
+    //Print data
     cip = (cell*)((unsigned char*)code + (amxhdr.dat - amxhdr.cod));
     codesize = amxhdr.hea - amxhdr.cod;
     count = 0;
+    int flag = 0;
     fprintf(fpdata, "[00000000] >> ");
     while (((unsigned char*)cip - (unsigned char*)code) < codesize)
     {
         if (count == 0)
-        {
             tmp = (cell)((cip-code) * sizeof(cell) - (amxhdr.dat - amxhdr.cod));
+        if(flag == 1)
+        {
+            fprintf(fpdata,"\n[%08"PRIxC"] >> ", tmp + count * 4);
+            flag = 0;
         }
         if((int)*cip == 0)
-        {
-            fprintf(fpdata,"\n[%08"PRIxC"] >> ", tmp);
-        }
+            flag = 1;
         sym = addchars(*cip, count);
         fprintf(fpdata, "%c", sym);
         count = (count + 1) % 4;
         cip++;
     }
+
+    if (dbgloaded) dbg_FreeInfo(&amxdbg);
+
     free(code);
     fclose(fpamx);
+    fclose(fplist);
     fclose(fpdata);
+    fclose(fpfunc);
     return 0;
 }
