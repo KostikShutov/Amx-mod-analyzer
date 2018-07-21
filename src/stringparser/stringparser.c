@@ -9,119 +9,108 @@
 
 #include "funcs.h"
 
-extern void expand(unsigned char *code, long codesize, long memsize);
-extern char addchars(cell value, int pos);
-extern int getPositionStrip(int i);
-
 extern cell global_strip[MAX_STRIP];
 extern int counter;
 
-extern FILE *fpamx, *fpfunc;
+extern FILE *fpamx/*, *fpfunc*/;
 extern AMX_HEADER amxhdr;
 extern int dbgloaded;
 extern AMX_DBG amxdbg;
 
 extern OPCODE opcodelist[];
 
-void func_CreateDynamicObject(char* name)
+void func_CreateDynamicObject(char* name, FILE* _fpfunc)
 {
     #define params_CreateDynamicObject 14
     float_ieee754 u;
-    fprintf(fpfunc, "%s(", name);
+    fprintf(_fpfunc, "%s(", name);
     for(int i = getPositionStrip(counter), j = 0; j < params_CreateDynamicObject; i = getPositionStrip(i), j++)
     {
         if((j >= 1 && j <= 6) || j == 10)
         {
             u.i = global_strip[i];
-            fprintf(fpfunc,"%f",u.f);
+            fprintf(_fpfunc,"%f",u.f);
         }
         else
         {
-            fprintf(fpfunc,"%d", global_strip[i]);
+            fprintf(_fpfunc,"%d", global_strip[i]);
         }
 
         if(j != params_CreateDynamicObject - 1)
-            fprintf(fpfunc, ", ");
+            fprintf(_fpfunc, ", ");
     }
-    fprintf(fpfunc, ");\n");
+    fprintf(_fpfunc, ");\n");
 }
 
-void func_CreateObject(char* name)
+void func_CreateObject(char* name, FILE* _fpfunc)
 {
     #define params_CreateObject 8
     float_ieee754 u;
-    fprintf(fpfunc, "%s(", name);
+    fprintf(_fpfunc, "%s(", name);
     for(int i = getPositionStrip(counter), j = 0; j < params_CreateObject; i = getPositionStrip(i), j++)
     {
         if(j >= 1 && j <= 7)
         {
             u.i = global_strip[i];
-            fprintf(fpfunc,"%f",u.f);
+            fprintf(_fpfunc,"%f",u.f);
         }
         else
         {
-            fprintf(fpfunc,"%d", global_strip[i]);
+            fprintf(_fpfunc,"%d", global_strip[i]);
         }
 
         if(j != params_CreateObject - 1)
-            fprintf(fpfunc, ", ");
+            fprintf(_fpfunc, ", ");
     }
-    fprintf(fpfunc, ");\n");
+    fprintf(_fpfunc, ");\n");
 }
 
-void func_Create3DTextLabel(char* name)
+void func_Create3DTextLabel(char* name, FILE* _fpfunc)
 {
     #define params_Create3DTextLabel 8
     float_ieee754 u;
-    fprintf(fpfunc, "%s(", name);
+    fprintf(_fpfunc, "%s(", name);
     for(int i = getPositionStrip(counter), j = 0; j < params_Create3DTextLabel; i = getPositionStrip(i), j++)
     {
         if(j == 0 || j == 1) // Параметр - строка
         {
-            fprintf(fpfunc,"%08"PRIxC"", global_strip[i]);
+            fprintf(_fpfunc,"%08"PRIxC"", global_strip[i]);
         }
         else if(j >= 2 && j <= 5) // Параметр - float
         {
             u.i = global_strip[i];
-            fprintf(fpfunc,"%f",u.f);
+            fprintf(_fpfunc,"%f",u.f);
         }
         else // Параметр - число
         {
-            fprintf(fpfunc,"%d", global_strip[i]);
+            fprintf(_fpfunc,"%d", global_strip[i]);
         }
 
         if(j != params_Create3DTextLabel - 1)
-            fprintf(fpfunc, ", ");
+            fprintf(_fpfunc, ", ");
     }
-    fprintf(fpfunc, ");\n");
+    fprintf(_fpfunc, ");\n");
 }
 
-int execute(int argc,char *argv[])
-{
-    if (argc != 2)
-    {
-        printf("Usage: stringparser <*.amx>\n");
-        return 1;
-    }
 
-    char name[FILENAME_MAX], data[FILENAME_MAX], objects[FILENAME_MAX];
+int execute(char *mod_name_amx, const char* mod_name)
+{
+    char name[FILENAME_MAX], data[FILENAME_MAX];
     FILE *fplist, *fpdata;
 
-    strcpy(name, "source_");
-    strcat(name, argv[1]);
+    strcpy(name, mod_name);
+    strcat(name, "/source_");
+    strcat(name, mod_name);
     strcat(name, ".txt");
 
-    strcpy(data, "data_");
-    strcat(data, argv[1]);
+    strcpy(data, mod_name);
+    strcat(data, "/data_");
+    strcat(data, mod_name);
     strcat(data, ".txt");
 
-    strcpy(objects, "objects_");
-    strcat(objects, argv[1]);
-    strcat(objects, ".txt");
-
-    if ((fpamx = fopen(argv[1], "rb")) == NULL)
+    if ((fpamx = fopen(mod_name_amx, "rb")) == NULL)
     {
-        printf("Unable to open input file \"%s\"\n", argv[1]);
+        printf("Unable to open input file \"%s\"\n", mod_name_amx);
         return 1;
     }
     if ((fplist = fopen(name, "wt")) == NULL)
@@ -132,11 +121,6 @@ int execute(int argc,char *argv[])
     if ((fpdata = fopen(data, "wt")) == NULL)
     {
         printf("Unable to create output file \"%s\"\n", data);
-        return 1;
-    }
-    if ((fpfunc = fopen(objects, "wt")) == NULL)
-    {
-        printf("Unable to create output file \"%s\"\n", objects);
         return 1;
     }
 
@@ -249,6 +233,6 @@ int execute(int argc,char *argv[])
     fclose(fpamx);
     fclose(fplist);
     fclose(fpdata);
-    fclose(fpfunc);
+    //fclose(fpfunc);
     return 0;
 }

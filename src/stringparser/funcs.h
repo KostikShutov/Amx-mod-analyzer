@@ -38,7 +38,7 @@ cell do_symbol(FILE *ftxt,const cell *params,cell opcode,cell cip);
 
 void expand(unsigned char *code, long codesize, long memsize);
 char addchars(cell value, int pos);
-int execute(int argc,char *argv[]);
+int execute(char *mod_name_amx, const char* mod_name);
 
 int getPositionStrip(int i);
 
